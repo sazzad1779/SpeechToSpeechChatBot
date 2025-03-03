@@ -1,0 +1,149 @@
+body {
+    font-family: Arial, sans-serif;
+    margin: 0;
+    padding: 0;
+    background-color: #f0f0f0;
+}
+
+#container {
+    display: flex;
+    height: 100vh;
+    overflow: hidden;
+}
+
+#sidebar {
+    width: 20%;
+    background-color: #27333c;
+    color: #fff;
+    padding: 15px;
+    overflow-y: auto;
+    transition: all 0.3s ease;
+}
+
+#sidebar h2 {
+    margin-top: 0;
+}
+
+#session-list {
+    margin-top: 15px;
+}
+
+#session-list button {
+    display: block;
+    width: 100%;
+    background-color: #3a474f;
+    color: #fff;
+    border: none;
+    margin-bottom: 5px;
+    padding: 8px;
+    cursor: pointer;
+    text-align: left;
+}
+
+#session-list button:hover {
+    background-color: #5a6c75;
+}
+
+#main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    background-color: #fff;
+}
+
+#header {
+    background-color: #242d34;
+    color: #fff;
+    padding: 10px;
+    text-align: center;
+    position: relative;
+    width: 100%;
+}
+
+#controls {
+    display: flex;
+    justify-content: center;
+    margin: 10px 0;
+}
+
+#response-container {
+    flex: 1;
+    border-top: 1px solid #ccc;
+    border-bottom: 1px solid #ccc;
+    padding: 10px;
+    overflow-y: auto;
+    background-color: #f9f9f9;
+}
+
+#status {
+    text-align: center;
+    margin-top: 5px;
+    font-weight: bold;
+}
+
+.chat-message {
+    margin: 5px 0;
+    padding: 10px;
+    border-radius: 5px;
+}
+
+.user-message {
+    background-color: #dfe6e9;
+    align-self: flex-start;
+}
+
+.bot-message {
+    background-color: #74b9ff;
+    align-self: flex-end;
+    color: #fff;
+}
+
+#footer {
+    background-color: #dfe6e9;
+    padding: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+#record-button {
+    background-color: #d63031; /* Default to gray */
+    color: #fff;
+    border: none;
+    cursor: pointer;
+    font-size: 24px;
+    padding: 10px;
+    border-radius: 50%;
+}
+
+#record-button:hover {
+    background-color: #ef9d9d;
+    color: #fff;
+}
+
+#minimize-btn {
+    background-color: transparent;
+    border: none;
+    color: white;
+    font-size: 18px;
+    cursor: pointer;
+    position: absolute;
+    top: 10px;
+    left: 10px;
+}
+
+#sidebar.minimized h2,
+#sidebar.minimized #session-list,
+#sidebar.minimized #add-session-btn {
+    display: none;
+}
+
+#sidebar.minimized {
+    width: 40px;
+    padding: 0;
+}
+
+#main.expanded {
+    flex-grow: 1;
+    width: 100%;
+}

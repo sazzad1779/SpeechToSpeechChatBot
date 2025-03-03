@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RoyalGPT Voice To Voice ChatBot</title>
+    <script src="https://cdn.socket.io/4.0.0/socket.io.min.js"></script>
+    <style>
+        #response-container {
+            border: 1px solid #ccc;
+            padding: 10px;
+            width: 100%;
+            height: 200px;
+            overflow-y: scroll;
+            background-color: #f9f9f9;
+        }
+        audio {
+            display: none; /* Hide the audio player */
+        }
+    </style>
+</head>
+<body>
+    <h1>RoyalGPT Voice To Voice ChatBot</h1>
+    <button id="start">Start Recording</button>
+    <button id="stop" disabled>Stop Recording</button>
+    <p id="status">Status: Idle</p>
+    <div id="response-container"></div>
+    <audio id="playback" controls></audio>
+
+    <script>
+        let socket;
+        let mediaRecorder;
+        let audioChunks = [];
+        let silenceTimer;
+        let isStopped = false;  // Flag to track if recording was stopped
+        const VAD_THRESHOLD = 2000; // 2 seconds of silence
+        const session_id = `session_${Math.random().toString(36).substr(2, 9)}`;
+        let mimeType = '';
+
+        // Detect supported MIME type (WAV or WebM)
+        if (MediaRecorder.isTypeSupported('audio/wav')) {
+            mimeType = 'audio/wav';
+        } else if (MediaRecorder.isTypeSupported('audio/webm')) {
+            mimeType = 'audio/webm';
+        } else {
+            alert("Your browser does not support WAV or WebM recording.");
+        }
+
+        // Initialize SocketIO connection
+        function initializeSocket() {
+            socket = io.connect('/');
+
+            socket.on('connect', () => {
+                console.log('Connected to server with session ID:', session_id);
+                document.getElementById('status').textContent = 'Status: Connected to server';
+            });
+
+            socket.on('disconnect', () => {
+                console.log('Disconnected from server');
+                document.getElementById('status').textContent = 'Status: Disconnected from server';
+            });
+
+            // Receive and display the transcription (user input text)
+            socket.on('transcription', (data) => {
+                if (data.session_id === session_id) {  // Check session ID
+                    const transcription = data.transcription;
+                    const responseContainer = document.getElementById('response-container');
+                    const newTranscription = document.createElement('p');
+                    newTranscription.textContent = `User: ${transcription}`;
+                    responseContainer.appendChild(newTranscription);
+                    responseContainer.scrollTop = responseContainer.scrollHeight;
+                }
+            });
+
+            socket.on('llm_response', (data) => {
+                if (data.session_id === session_id) {  // Check session ID
+                    const responseContainer = document.getElementById('response-container');
+                    let responseElement = document.querySelector('#response-container p.bot');
+
+                    if (!responseElement) {
+                        // Create a new response element if it doesn't exist and set initial text to "Bot:"
+                        responseElement = document.createElement('p');
+                        responseElement.classList.add('bot');
+                        responseElement.textContent = 'Bot:';
+                        responseContainer.appendChild(responseElement);
+                    }
+
+                    // Append the incoming response text to the existing "Bot:" text
+                    responseElement.textContent += ` ${data.response}`;
+                    responseContainer.scrollTop = responseContainer.scrollHeight;
+                }
+            });
+
+
+            socket.on('llm_response_end', (data) => {
+                if (data.session_id === session_id) {  // Check session ID
+                    document.querySelector('#response-container p.bot').classList.remove('bot');
+                }
+            });
+
+            // Handle audio data response
+            socket.on('audio', (data) => {
+                const response = JSON.parse(data);
+                if (response.session_id === session_id) {  // Check session ID
+                    const audioData = response.audio;
+                    const audioBlob = new Blob([Uint8Array.from(atob(audioData), c => c.charCodeAt(0))], { type: mimeType });
+                    const audioUrl = URL.createObjectURL(audioBlob);
+                    document.getElementById('playback').src = audioUrl;
+                    document.getElementById('playback').play();
+                }
+            });
+
+            socket.on('error', (data) => {
+                console.error('Error:', data.message);
+                document.getElementById('start').disabled = false;
+            });
+        }
+
+        // Start continuous recording
+        function startRecording() {
+            navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
+                audioChunks = []; // Reset the audio chunks
+
+                mediaRecorder = new MediaRecorder(stream, { mimeType: mimeType });
+
+                const audioContext = new AudioContext();
+                const source = audioContext.createMediaStreamSource(stream);
+                const processor = audioContext.createScriptProcessor(2048, 1, 1);
+
+                processor.onaudioprocess = (event) => {
+                    if (isStopped) return;
+
+                    const inputData = event.inputBuffer.getChannelData(0);
+                    let total = inputData.reduce((acc, val) => acc + Math.abs(val), 0);
+                    const average = total / inputData.length;
+
+                    if (average < 0.01) {
+                        if (!silenceTimer) {
+                            silenceTimer = setTimeout(() => {
+                                mediaRecorder.stop();
+                                silenceTimer = null;
+                            }, VAD_THRESHOLD);
+                        }
+                    } else {
+                        clearTimeout(silenceTimer);
+                        silenceTimer = null;
+                    }
+                };
+
+                mediaRecorder.ondataavailable = (event) => {
+                    audioChunks.push(event.data);
+                };
+
+                mediaRecorder.onstop = () => {
+                    const audioBlob = new Blob(audioChunks, { type: mimeType });
+                    const reader = new FileReader();
+                    reader.readAsDataURL(audioBlob);  // Read as base64 data URL
+                    reader.onloadend = () => {
+                        const base64AudioData = reader.result.split(',')[1];
+                        socket.emit('audio', { session_id, data: base64AudioData });
+                        if (!isStopped) {
+                            mediaRecorder.start();
+                        }
+                    };
+                    audioChunks = [];
+                };
+
+                source.connect(processor);
+                processor.connect(audioContext.destination);
+
+                mediaRecorder.start();
+                document.getElementById('status').textContent = 'Status: Recording...';
+                document.getElementById('start').disabled = true;
+                document.getElementById('stop').disabled = false;
+                isStopped = false;
+            });
+        }
+
+        function stopRecording() {
+            isStopped = true;
+            if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+                mediaRecorder.stop();
+            }
+            document.getElementById('status').textContent = 'Status: Stopped';
+            document.getElementById('start').disabled = false;
+            document.getElementById('stop').disabled = true;
+        }
+
+        document.getElementById('start').addEventListener('click', startRecording);
+        document.getElementById('stop').addEventListener('click', stopRecording);
+
+        initializeSocket();
+    </script>
+</body>
+</html>
